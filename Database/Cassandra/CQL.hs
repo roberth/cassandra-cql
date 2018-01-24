@@ -213,8 +213,6 @@ import Data.Fixed (Pico)
 import System.Timeout (timeout)
 import System.Log.Logger (debugM, warningM)
 
-import Debug.Trace
-
 defaultConnectionTimeout :: NominalDiffTime
 defaultConnectionTimeout = 10
 
@@ -1937,8 +1935,8 @@ exRows0 = [[Just "Evanescence",Just "\NUL\NUL\ETX\US"]]
 
 decodeRows :: (MonadCatch m, CasValues values) => Query Rows any_i values -> Metadata -> [[Maybe ByteString]] -> m [values]
 decodeRows query meta rows0 = do
-    let meta' = trace ("meta: " ++ show meta) meta
-    let rows0' = trace ("rows0: " ++ show rows0) rows0
+    let meta' = meta
+    let rows0' = rows0
     let rows1 = flip map rows0' $ \cols -> decodeValues (zip (metadataTypes meta') cols)
     case lefts rows1 of
         (err:_) -> throwM $ ValueMarshallingException TransportReceiving (T.pack $ show err) (queryText query)
