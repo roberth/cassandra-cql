@@ -132,6 +132,7 @@ module Database.Cassandra.CQL (
         executeSchema,
         executeSchemaVoid,
         executeWrite,
+        executeNotExists,
         executeRows,
         executeRow,
         executeTrans,
@@ -1349,6 +1350,7 @@ newtype QueryID = QueryID (Digest SHA1)
 -- | The first type argument for Query. Tells us what kind of query it is.
 data Style = Schema   -- ^ A query that modifies the schema, such as DROP TABLE or CREATE TABLE
            | Write    -- ^ A query that writes data, such as an INSERT or UPDATE
+           | NotExists -- ^ A query that inserts data if the row doesn't exist, returning failed rows
            | Rows     -- ^ A query that returns a list of rows, such as SELECT
 
 -- | The text of a CQL query, along with type parameters to make the query type safe.
@@ -1943,6 +1945,23 @@ decodeRows query meta rows0 = do
         [] -> return ()
     let rows2 = flip map rows1 $ \(Right v) -> v
     return $ rows2
+
+-- | Execute a write operation that returns a list of rows that could not be inserted due to use of @INSERT ... IF NOT EXISTS@.
+--
+-- Note that the @i@ type corresponds to the query holes (@?@) whereas the @o@ type corresponds to the non-projected table columns.
+executeNotExists :: (MonadIO m, MonadCassandra m, CasValues i) =>
+                    Consistency       -- ^ Consistency level of the operation
+                 -> Query NotExists i o -- ^ CQL query to execute
+                 -> i                 -- ^ Input values substituted in the query
+                 -> m Bool -- FIXME: this should be [o]
+executeNotExists cons q i = do
+    res <- executeRaw q i cons
+    case res of
+        RowsResult (Metadata [ColumnSpec _ "[applied]" _]) [[Just "\001"]] -> do
+          return True
+        RowsResult _ _ -> do
+          return False -- FIXME: return the failed rows
+        _ -> throwM $ LocalProtocolError ("expected RowsResult, but got " `T.append` T.pack (show res)) (queryText q)
 
 -- | Execute a write operation that returns void.
 executeWrite :: (MonadIO m, MonadCassandra m, CasValues i) =>
